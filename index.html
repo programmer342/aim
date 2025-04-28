@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Eriks Shooter Game - Free Mode</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+            background-color: #111;
+            font-family: Arial, sans-serif;
+            user-select: none;
+        }
+        #menu, #gameCanvas {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #menu {
+            background-color: #222;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            z-index: 3;
+        }
+        #menu h1 {
+            font-size: 36px;
+        }
+        .button {
+            background-color: #444;
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 20px;
+            cursor: pointer;
+            transition: background 0.3s;
+            pointer-events: auto;
+        }
+        .button:hover {
+            background-color: #666;
+        }
+        #tips {
+            font-size: 16px;
+            color: #aaa;
+        }
+        .enemy {
+            width: 50px;
+            height: 50px;
+            background-color: red;
+            position: absolute;
+            top: -60px;
+            border-radius: 50%;
+            pointer-events: auto;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 10px;
+            z-index: 2;
+        }
+        #score, #missed, #timer {
+            color: white;
+            font-size: 20px;
+            pointer-events: none;
+        }
+        #menuButton {
+            background-color: rgba(100, 100, 100, 0.3); /* halb durchsichtig */
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            pointer-events: auto;
+            border: none;
+            transition: background 0.3s;
+        }
+        #menuButton:hover {
+            background-color: rgba(150, 150, 150, 0.5);
+        }
+        #accelerationButton {
+            background-color: rgba(0, 255, 0, 0.3);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            pointer-events: auto;
+            border: none;
+            transition: background 0.3s;
+        }
+        #accelerationButton:hover {
+            background-color: rgba(0, 255, 0, 0.5);
+        }
+        #credits {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            font-size: 14px;
+            color: #888;
+            pointer-events: none;
+        }
+        #gameOverScreen {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 4;
+        }
+        #gameOverScreen button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #gameOverScreen button:hover {
+            background-color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="menu">
+    <h1>Willkommen!</h1>
+    <button class="button" onclick="startGame('click')">Klicken zum Schießen</button>
+    <button class="button" onclick="startGame('hover')">Mit der Maus drüberfahren</button>
+    <div id="tips">
+        Tipp: Schieß die roten Kugeln ab, bevor sie unten ankommen!<br>
+        Je mehr Punkte du machst, desto schneller wird es!
+    </div>
+</div>
+
+<div id="gameCanvas" style="display: none;">
+    <div id="hud">
+        <div id="score">Punkte: 0</div>
+        <div id="missed">Verpasst: 0</div>
+        <div id="timer">Zeit: 0s</div>
+        <button id="menuButton" onclick="backToMenu()">Menü</button>
+        <button id="accelerationButton" onclick="toggleAcceleration()">Beschleunigen</button>
+    </div>
+    <div id="credits">Erstellt von Erik</div>
+</div>
+
+<div id="gameOverScreen">
+    <h2>Game Over!</h2>
+    <p>Du hast 10 Kugeln verpasst.</p>
+    <button onclick="backToMenu()">Zum Menü</button>
+</div>
+
+<script>
+    let controlMode = 'click';
+    let canvas = document.getElementById('gameCanvas');
+    let score = 0;
+    let missed = 0;
+    let spawnRate = 2000;
+    let enemySpeed = 4;  // Geschwindigkeit der Feinde
+    let enemies = [];
+    let spawnInterval;
+    let moveInterval;
+    let time = 0;
+    let timerInterval;
+    let gameActive = false;
+    let isAccelerated = false; // Flag, ob das Spiel beschleunigt ist
+
+    // Start the game based on chosen control mode
+    function startGame(mode) {
+        controlMode = mode;
+        document.getElementById('menu').style.display = 'none';
+        canvas.style.display = 'block';
+        resetGame();
+        gameActive = true;
+
+        // Start spawning and moving enemies
+        spawnInterval = setInterval(spawnEnemy, spawnRate);
+        moveInterval = setInterval(moveEnemies, 20);
+        timerInterval = setInterval(updateTimer, 1000);
+
+        // Set control mechanism based on chosen mode
+        if (controlMode === 'click') {
+            canvas.addEventListener('click', shootEnemy);
+            canvas.removeEventListener('mousemove', hoverEnemy);  // Remove hover event listener
+        } else if (controlMode === 'hover') {
+            canvas.addEventListener('mousemove', hoverEnemy);
+            canvas.removeEventListener('click', shootEnemy);  // Remove click event listener
+        }
+    }
+
+    // Reset the game state
+    function resetGame() {
+        score = 0;
+        missed = 0;
+        spawnRate = 2000;
+        enemySpeed = 4;  // Reset enemy speed
+        time = 0;
+        updateScore();
+        updateMissed();
+        updateTimerDisplay();
+
+        enemies.forEach(enemy => {
+            if (enemy.parentNode) enemy.parentNode.removeChild(enemy);
+        });
+        enemies = [];
+    }
+
+    // Spawn a new enemy
+    function spawnEnemy() {
+        if (!gameActive) return;
+
+        const enemy = document.createElement('div');
+        enemy.classList.add('enemy');
+        enemy.style.left = Math.random() * (canvas.offsetWidth - 50) + 'px';
+        enemy.style.top = '-60px';
+        canvas.appendChild(enemy);
+        enemies.push(enemy);
+    }
+
+    // Move enemies down the screen
+    function moveEnemies() {
+        if (!gameActive) return;
+
+        enemies.forEach((enemy, index) => {
+            let top = parseFloat(enemy.style.top);
+            enemy.style.top = (top + enemySpeed) + 'px'; // Increase enemy speed
+
+            const canvasHeight = canvas.offsetHeight;
+            if (top > canvasHeight) {
+                if (enemy.parentNode) {
+                    enemy.parentNode.removeChild(enemy);
+                }
+                enemies.splice(index, 1);
+                missed++;
+                updateMissed();
+
+                // Handle Game Over when 10 enemies are missed
+                if (missed >= 10) {
+                    gameOver();
+                }
+            }
+        });
+    }
+
+    // Handle clicking to shoot an enemy
+    function shootEnemy(e) {
+        if (!gameActive) return;
+        enemies.forEach((enemy, index) => {
+            const rect = enemy.getBoundingClientRect();
+            if (
+                e.clientX >= rect.left &&
+                e.clientX <= rect.right &&
+                e.clientY >= rect.top &&
+                e.clientY <= rect.bottom
+            ) {
+                destroyEnemy(enemy, index);
+            }
+        });
+    }
+
+    // Handle hovering to shoot an enemy
+    function hoverEnemy(e) {
+        if (!gameActive) return;
+        enemies.forEach((enemy, index) => {
+            const rect = enemy.getBoundingClientRect();
+            if (
+                e.clientX >= rect.left &&
+                e.clientX <= rect.right &&
+                e.clientY >= rect.top &&
+                e.clientY <= rect.bottom
+            ) {
+                destroyEnemy(enemy, index);
+            }
+        });
+    }
+
+    // Destroy an enemy when hit
+    function destroyEnemy(enemy, index) {
+        if (enemy.parentNode) {
+            enemy.parentNode.removeChild(enemy);
+        }
+        enemies.splice(index, 1);
+        score++;
+        updateScore();
+
+        if (score % 5 === 0 && spawnRate > 500) {
+            spawnRate -= 200;
+            clearInterval(spawnInterval);
+            spawnInterval = setInterval(spawnEnemy, spawnRate);
+        }
+    }
+
+    // Update score display
+    function updateScore() {
+        document.getElementById('score').innerText = 'Punkte: ' + score;
+    }
+
+    // Update missed count display
+    function updateMissed() {
+        document.getElementById('missed').innerText = 'Verpasst: ' + missed;
+    }
+
+    // Update timer display
+    function updateTimer() {
+        if (gameActive) {
+            time++;
+            updateTimerDisplay();
+        }
+    }
+
+    // Update timer display
+    function updateTimerDisplay() {
+        document.getElementById('timer').innerText = 'Zeit: ' + time + 's';
+    }
+
+    // Handle game over logic when 10 enemies are missed
+    function gameOver() {
+        gameActive = false;
+        clearInterval(spawnInterval);
+        clearInterval(moveInterval);
+        clearInterval(timerInterval);
+
+        document.getElementById('gameOverScreen').style.display = 'block'; // Show the game over screen
+    }
+
+    // Return to main menu
+    function backToMenu() {
+        gameActive = false;
+        clearInterval(spawnInterval);
+        clearInterval(moveInterval);
+        clearInterval(timerInterval);
+
+        canvas.style.display = 'none';
+        document.getElementById('menu').style.display = 'flex';
+        document.getElementById('gameOverScreen').style.display = 'none'; // Hide the game over screen
+    }
+
+    // Toggle acceleration on/off
+    function toggleAcceleration() {
+        if (!gameActive) return;
+
+        if (isAccelerated) {
+            // Deactivate acceleration
+            spawnRate = 2000;
+            enemySpeed = 4;
+            isAccelerated = false;
+            document.getElementById('accelerationButton').innerText = 'Beschleunigen';
+        } else {
+            // Activate acceleration
+            spawnRate = Math.max(400, spawnRate / 5); // 5-fache Beschleunigung, aber nicht langsamer als 400ms
+            enemySpeed = Math.min(20, enemySpeed * 5); // 5-fache Geschwindigkeit der Feinde, aber nicht schneller als 20px
+            isAccelerated = true;
+            document.getElementById('accelerationButton').innerText = 'Verlangsamen';
+        }
+
+        // Restart the spawn interval with new settings
+        clearInterval(spawnInterval);
+        spawnInterval = setInterval(spawnEnemy, spawnRate);
+    }
+</script>
+
+</body>
+</html>
